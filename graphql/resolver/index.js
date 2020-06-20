@@ -5,70 +5,69 @@ const EventModel = require('../../models/event');
 const UserModel = require('../../models/user');
 
 
-const getUserEvents = (eventIds) => {
-    return EventModel.find({
+const getUserEvents = async eventIds => {
+    try {
+        const events = await EventModel.find({
             _id: {
                 $in: eventIds
             }
         })
-        .then(events => {
-            return events.map(event => {
-                return {
-                    ...event._doc,
-                    _id: event.id,
-                    date:new Date(event._doc.date).toISOString(),
-                    creator: getUserByID.bind(this, events.creator)
-                }
-            })
+        events.map(event => {
+            console.log(this , 'lll')
+            return {
+                ...event._doc,
+                _id: event.id,
+                date: new Date(event._doc.date).toISOString(),
+                creator: getUserByID.bind(this, events.creator)
+            }
         })
-        .catch(err => {
-            throw err;
-        })
+        return events;
+    } catch (err) {        
+        console.log(err);
+        throw err;
+    }
 }
 
 
-const getUserByID = (userID) => {
-    return UserModel.findById(userID)
-        .then(userInformation => {
-            return {
-                ...userInformation._doc,
-                _id: userInformation.id,
-                createdEvents: getUserEvents.bind(this, userInformation._doc.createdEvents)
-            }
-        }).catch(err => {
-            console.log('No record found' + err);
-            throw err;
-        })
-
+const getUserByID = async userID => {
+    try {
+        const userInformation = await UserModel.findById(userID)
+        return {
+            ...userInformation._doc,
+            _id: userInformation.id,
+            createdEvent: getUserEvents.bind(this, userInformation._doc.createdEvents)
+        }
+    } catch (err) {
+        console.log('No record found' + err);
+        throw err;
+    }
 }
 
 module.exports = {
-    events: () => {
-        return EventModel.find().populate('creator')
-            .then(result => {
-                return result.map(event => {
-                    console.log(event._doc.date);
-                    return {
-                        ...event._doc,
-                        _id: event.id,
-                        // creator: {
-                        //     ...event.creator._doc,
-                        //     _id: event.creator.id
-                        // }   
+    events: async () => {
+        const result = await EventModel.find().populate('creator')
+        try {
+            return result.map(event => {
+                return {
+                    ...event._doc,
+                    _id: event.id,
+                    // creator: {
+                    //     ...event.creator._doc,
+                    //     _id: event.creator.id
+                    // }   
 
-                        //or method using function 
-                        
-                        date:new Date(event._doc.date).toISOString(),
-                        creator: getUserByID.bind(this, event.creator._doc)
+                    //or method using function
+                    date: new Date(event._doc.date).toISOString(),
+                    creator: getUserByID.bind(this, event.creator._doc)
 
-                    };
-                })
-            }).catch(err => {
-                console.error(err + 'in posting data');
-                throw err;
+                };
             })
+        } catch (err) {
+            console.error(err + 'in posting data');
+            throw err;
+        }
     },
-    createEvent: (args) => {
+    createEvent: async (args) => {
         const event = new EventModel({
             title: args.eventInput.title,
             description: args.eventInput.description,
@@ -77,61 +76,50 @@ module.exports = {
             creator: '5ec0e2f4442dc34450f131d6'
         });
         let createdEvent;
-        return event.save().then(result => {
-            console.log(result , 'savve')
-                createdEvent = {
-                    ...result._doc,
-                    _id: result._doc._id.toString(),
-                    date:new Date(event._doc.date).toISOString(),
-                    creator:getUserByID.bind(this, result._doc.creator)
-                };
-                return UserModel.findById('5ec0e2f4442dc34450f131d6')
-                    .then(user => {
-                        if (!user) {
-                            throw new Error(`User not found.`)
-                        } else {
-                            user.createdEvents.push(event); // here we updating the user table createdEventColumn 
-                            return user.save();
-                        }
-                    })
-            })
-            .then(result => {
-                return createdEvent;
-            })
-            .catch(err => {
-                console.error(err + 'in posting data');
-                throw err;
-            })
+        try {
+            const result = await event.save()
+            createdEvent = {
+                ...result._doc,
+                _id: result._doc._id.toString(),
+                date: new Date(event._doc.date).toISOString(),
+                creator: getUserByID.bind(this, result._doc.creator)
+            };
+            const user = await UserModel.findById('5ec0e2f4442dc34450f131d6')
+            if (!user) {
+                throw new Error(`User not found.`)
+            } else {
+                user.createdEvents.push(event); // here we updating the user table createdEventColumn 
+                await user.save();
+            }
+            return createdEvent;
+        } catch (err) {
+            console.error(err + 'in posting data');
+            throw err;
+        }
     },
 
-    createUser: (args) => {
-
-        return UserModel.findOne({
+    createUser: async (args) => {        
+       try {
+        const existingUser = await UserModel.findOne({
             email: args.userInput.email
-        }).then(user => {
-            if (user) {
-                throw new Error(`This email ${args.userInput.email} is already exist.`)
-            } else {
-                return bcrypt.hash(args.userInput.password, 12)
-                    .then(hashedPassword => {
-                        const user = new UserModel({
-                            email: args.userInput.email,
-                            password: hashedPassword
-                        })
-                        return user.save().then(userResult => {
-                            console.log('user added')
-                            return {
-                                ...userResult._doc
-                            }
-                        }).catch(err => {
-                            console.log(err + 'in adding user');
-                            throw err;
-                        })
-                    })
-                    .catch(err => {
-                        throw err;
-                    })
-            }
         })
+        if (existingUser) {
+            throw new Error(`This email ${args.userInput.email} is already exist.`)
+        } else {
+            const hashedPassword = await bcrypt.hash(args.userInput.password, 12)
+            const user = new UserModel({
+                email: args.userInput.email,
+                password: hashedPassword
+            })
+            const userResult = await user.save()
+            console.log('user added')
+            return {
+                ...userResult._doc
+            }
+        }
+       } catch(err) {
+            console.log('err in craeting user ...' + err);
+            throw err;    
+       }
     }
 }
